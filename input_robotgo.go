@@ -2,9 +2,12 @@
 
 package main
 
-import "github.com/go-vgo/robotgo"
+import (
+	"github.com/go-vgo/robotgo"
+	"time"
+)
 
-func buttonName(button int) {
+func buttonName(button int) string {
 	switch button {
 	case 0:
 		return "left"
@@ -30,6 +33,7 @@ func move(x, y float64) {
 	sx := int(x * float64(sw))
 	sy := int(y * float64(sh))
 	robotgo.Move(sx, sy)
+	time.Sleep(time.Millisecond)
 }
 
 func buttonState(button int, press bool) {

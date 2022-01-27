@@ -66,7 +66,7 @@ func buttonState(button int, press bool) {
 		{
 			Type: win.INPUT_MOUSE,
 			Mi: win.MOUSEINPUT{
-				DwFlags: mouseButtonFlag(button, false),
+				DwFlags: mouseButtonFlag(button, press),
 			},
 		},
 	}
