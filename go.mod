@@ -1,4 +1,4 @@
-module github.com/binzume/remotecontrild
+module github.com/binzume/inputproxy
 
 go 1.17
 

@@ -1,4 +1,6 @@
-# WebSocket経由でマウスやキーボード入力をするやつ
+# InputProxy
+
+WebSocket経由でマウスやキーボード入力を行うプログラム．
 
 https://github.com/binzume/webrtc-rdp 用につくったもの．
 
@@ -8,8 +10,8 @@ https://github.com/binzume/webrtc-rdp 用につくったもの．
 ## Usage
 
 ```
-go build
-./inputproxy -port 9000
+go install github.com/binzume/inputproxy@latest
+inputproxy -port 9000
 ```
 
 デフォルトでは localhost:9000 で待ち受けます．URLは毎回変わるので固定したい場合は secret オプションを指定してください．
