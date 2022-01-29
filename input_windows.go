@@ -32,8 +32,13 @@ func mouseButtonFlag(button int, press bool) uint32 {
 }
 
 func move(x, y float64) {
-	sw := win.GetSystemMetrics(win.SM_CXVIRTUALSCREEN)
-	sh := win.GetSystemMetrics(win.SM_CYVIRTUALSCREEN)
+	// TODO
+	sw := win.GetSystemMetrics(win.SM_CXSCREEN)
+	sh := win.GetSystemMetrics(win.SM_CYSCREEN)
+	if *defaultDisplay == -1 {
+		sw = win.GetSystemMetrics(win.SM_CXVIRTUALSCREEN)
+		sh = win.GetSystemMetrics(win.SM_CYVIRTUALSCREEN)
+	}
 	sx := int32(x * float64(sw))
 	sy := int32(y * float64(sh))
 	win.SetCursorPos(sx, sy)

@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	port   = flag.Int("port", 9000, "http listen port")
-	host   = flag.String("interface", "localhost", "http listen interface")
-	secret = flag.String("secret", "", "secret string (default: random)")
+	port           = flag.Int("port", 9000, "http listen port")
+	host           = flag.String("interface", "localhost", "http listen interface")
+	secret         = flag.String("secret", "", "secret string (default: random)")
+	defaultDisplay = flag.Int("defaultDisplay", 0, "default display id (windows)")
 )
 
 func genRandom(n int) string {
