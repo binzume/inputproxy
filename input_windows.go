@@ -44,6 +44,18 @@ func move(x, y float64) {
 	win.SetCursorPos(sx, sy)
 }
 
+func moveW(x, y float64, hWnd uint64) bool {
+	var rect win.RECT
+	if !win.GetWindowRect(win.HWND(hWnd), &rect) {
+		return false
+	}
+	win.SetForegroundWindow(win.HWND(hWnd)) // TODO
+	sx := rect.Left + int32(x*float64(rect.Right-rect.Left))
+	sy := rect.Top + int32(y*float64(rect.Bottom-rect.Top))
+	win.SetCursorPos(sx, sy)
+	return true
+}
+
 func click(button int) {
 	inputs := []win.MOUSE_INPUT{
 		{

@@ -36,9 +36,15 @@ var WSUpgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
+type Target struct {
+	Type string `json:"type"`
+	ID   uint64 `json:"id"`
+}
+
 type InputEvent struct {
 	Type   string `json:"type"`
 	Action string `json:"action"`
+	Target Target `json:"target"`
 
 	// Mouse
 	X      float64 `json:"x"`
@@ -51,7 +57,13 @@ type InputEvent struct {
 }
 
 func handleMouse(msg *InputEvent) {
-	move(msg.X, msg.Y)
+	if msg.Target.Type == "window" {
+		if !moveW(msg.X, msg.Y, msg.Target.ID) {
+			return
+		}
+	} else {
+		move(msg.X, msg.Y)
+	}
 	if msg.Action == "click" {
 		click(msg.Button)
 	} else if msg.Action == "down" || msg.Action == "mousedown" {

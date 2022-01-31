@@ -36,6 +36,10 @@ func move(x, y float64) {
 	time.Sleep(time.Millisecond)
 }
 
+func moveW(x, y float64, windowId uint64) bool {
+	return false
+}
+
 func buttonState(button int, press bool) {
 	var state string
 	if press {
