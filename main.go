@@ -14,6 +14,7 @@ var (
 	port           = flag.Int("port", 9000, "http listen port")
 	host           = flag.String("interface", "localhost", "http listen interface")
 	secret         = flag.String("secret", "", "secret string (default: random)")
+	enableKeyinput = flag.Bool("keyinput", false, "Enable keyinput")
 	defaultDisplay = flag.Int("defaultDisplay", 0, "default display id (windows)")
 )
 
@@ -74,7 +75,6 @@ func handleMouse(msg *InputEvent) {
 }
 
 func handkeKey(msg *InputEvent) {
-	move(msg.X, msg.Y)
 	if msg.Action == "press" {
 		key(msg.Key, msg.MetaKeys)
 	} else if msg.Action == "down" {
@@ -107,7 +107,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			handleMouse(&msg)
 			break
 		case "key":
-			handkeKey(&msg)
+			if *enableKeyinput {
+				handkeKey(&msg)
+			}
 			break
 		}
 	}
