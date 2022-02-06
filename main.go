@@ -15,6 +15,7 @@ var (
 	host           = flag.String("interface", "localhost", "http listen interface")
 	secret         = flag.String("secret", "", "secret string (default: random)")
 	enableKeyinput = flag.Bool("keyinput", false, "Enable keyinput")
+	debugLog       = flag.Bool("debug", false, "Enable debugLog")
 	defaultDisplay = flag.Int("defaultDisplay", 0, "default display id (windows)")
 )
 
@@ -53,8 +54,7 @@ type InputEvent struct {
 	Button int     `json:"button"`
 
 	// Key
-	Key      string `json:"key"`
-	MetaKeys int    `json:"meta"`
+	Key string `json:"key"`
 }
 
 func handleMouse(msg *InputEvent) {
@@ -76,7 +76,7 @@ func handleMouse(msg *InputEvent) {
 
 func handkeKey(msg *InputEvent) {
 	if msg.Action == "press" {
-		key(msg.Key, msg.MetaKeys)
+		key(msg.Key, 0)
 	} else if msg.Action == "down" {
 		keyState(msg.Key, true)
 	} else if msg.Action == "up" {
@@ -100,6 +100,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("error: %v", err)
 			conn.WriteJSON(map[string]interface{}{"type": "error"})
 			break
+		}
+		if *debugLog {
+			log.Println(msg)
 		}
 
 		switch msg.Type {
