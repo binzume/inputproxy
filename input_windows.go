@@ -5,7 +5,9 @@ package main
 import (
 	"log"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/lxn/win"
@@ -13,17 +15,130 @@ import (
 )
 
 var (
-	vkKeyScan *windows.LazyProc
+	user32                 = windows.NewLazySystemDLL("user32.dll")
+	vkKeyScan              = user32.NewProc("VkKeyScanW")
+	enumDisplayDevicesW    = user32.NewProc("EnumDisplayDevicesW")
+	enumDisplayMonitors    = user32.NewProc("EnumDisplayMonitors")
+	enumDisplaySettingsExW = user32.NewProc("EnumDisplaySettingsExW")
+	setProcessDPIAware     = user32.NewProc("SetProcessDPIAware")
 )
 
 func init() {
-	var libuser32 = windows.NewLazySystemDLL("user32.dll")
-	vkKeyScan = libuser32.NewProc("VkKeyScanW")
+	setProcessDpiAwarenessContext := user32.NewProc("SetProcessDpiAwarenessContext")
+	if err := setProcessDpiAwarenessContext.Find(); err == nil {
+		var DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 int32 = -4
+		r0, _, _ := setProcessDpiAwarenessContext.Call(uintptr(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+		if r0 != 1 {
+			return
+		}
+	} else {
+		syscall.Syscall(setProcessDPIAware.Addr(), 0, 0, 0, 0)
+		//SetProcessDpiAwareness(2)
+	}
 }
 
 func VkKeyScan(ch uint16) uint16 {
 	ret, _, _ := syscall.Syscall(vkKeyScan.Addr(), 1, uintptr(ch), 0, 0)
 	return uint16(ret)
+}
+
+type MonitorCallback func(hMonitor windows.Handle, hdcMonitor windows.Handle, lprcMonitor *win.RECT) int
+
+type DISPLAY_DEVICE struct {
+	Size         uint32
+	DeviceName   [32]uint16
+	DeviceString [128]uint16
+	Flags        uint32
+	DeviceID     [128]uint16
+	DeviceKey    [128]uint16
+}
+
+type DEVMODEW struct {
+	DeviceName    [32]uint16
+	SpecVersion   uint16
+	DriverVersion uint16
+	Size          uint16
+	DriverExtra   uint16
+	Fields        uint32
+	X             int32
+	Y             int32
+	Orientation   uint32
+	FixedOutput   uint32
+	Color         int16
+	Duplex        int16
+	YResolution   int16
+	TTOption      int16
+	Collate       int16
+	FormName      [32]uint16
+	LogPixels     uint16
+	BitsPerPixel  uint32
+	PelsWidth     uint32
+	PelsHeight    uint32
+	Flags         uint32
+	Frequency     uint32
+	ICMMethod     uint32
+	ICMIntent     uint32
+	MediaType     uint32
+	DitherType    uint32
+	Reserved1     uint32
+	Reserved2     uint32
+	PanningWidth  uint32
+	PanningHeight uint32
+}
+
+func EnumDisplayDevices(dummy string, idx int, displayDevice *DISPLAY_DEVICE, flags uint32) bool {
+	displayDevice.Size = uint32(unsafe.Sizeof(*displayDevice))
+	ret, _, _ := syscall.Syscall6(enumDisplayDevicesW.Addr(), 4, 0, uintptr(idx), uintptr(unsafe.Pointer(displayDevice)), uintptr(flags), 0, 0)
+	return ret != 0
+}
+
+func EnumDisplaySettingsEx(deviceName []uint16, modeNum int32, devMode *DEVMODEW, flags uint32) bool {
+	// ENUM_CURRENT_SETTINGS = -1
+	devMode.Size = uint16(unsafe.Sizeof(*devMode))
+	ret, _, _ := enumDisplaySettingsExW.Call(uintptr(unsafe.Pointer(&deviceName[0])), uintptr(modeNum), uintptr(unsafe.Pointer(devMode)), uintptr(flags))
+	return ret != 0
+}
+
+func GetMonitorsRect() []win.RECT {
+	var dd DISPLAY_DEVICE
+	var ret []win.RECT
+	for i := 0; EnumDisplayDevices("", i, &dd, 0); i++ {
+		var mode DEVMODEW
+		if dd.Flags&1 != 0 && EnumDisplaySettingsEx(dd.DeviceName[:], -1, &mode, 0) {
+			rect := win.RECT{Left: mode.X, Top: mode.Y, Right: mode.X + int32(mode.PelsWidth), Bottom: mode.Y + int32(mode.PelsHeight)}
+			ret = append(ret, rect)
+		} else {
+			var rect win.RECT
+			rect.Right = win.GetSystemMetrics(win.SM_CXSCREEN)
+			rect.Bottom = win.GetSystemMetrics(win.SM_CYSCREEN)
+			ret = append(ret, rect)
+		}
+	}
+	return ret
+}
+
+var getMonitorBoundsCallback = syscall.NewCallback(func(hMonitor windows.Handle, hdcMonitor windows.Handle, lprcMonitor *win.RECT, dwData uintptr) uintptr {
+	if dwData == 0 {
+		return uintptr(0)
+	}
+	var cb *MonitorCallback = nil
+	cb = (*MonitorCallback)(unsafe.Pointer(uintptr(unsafe.Pointer(cb)) + dwData))
+	return uintptr((*cb)(hMonitor, hdcMonitor, lprcMonitor))
+})
+
+func EnumDisplayMonitors(cb MonitorCallback) bool {
+	ret, _, _ := syscall.Syscall6(enumDisplayMonitors.Addr(), 4, 0, 0, getMonitorBoundsCallback, uintptr(unsafe.Pointer(&cb)), 0, 0)
+	return ret != 0
+}
+
+func GetMonitorsRect2() []win.RECT {
+	var ret []win.RECT
+	EnumDisplayMonitors(func(hMonitor windows.Handle, hdcMonitor windows.Handle, lprcMonitor *win.RECT) int {
+		log.Println(hMonitor, hdcMonitor)
+		ret = append(ret, *lprcMonitor)
+		return 1
+	})
+	return ret
 }
 
 func mouseButtonFlag(button int, press bool) uint32 {
@@ -48,17 +163,26 @@ func mouseButtonFlag(button int, press bool) uint32 {
 	}
 }
 
-func move(x, y float64) {
-	// TODO
-	sw := win.GetSystemMetrics(win.SM_CXSCREEN)
-	sh := win.GetSystemMetrics(win.SM_CYSCREEN)
-	if *defaultDisplay == -1 {
-		sw = win.GetSystemMetrics(win.SM_CXVIRTUALSCREEN)
-		sh = win.GetSystemMetrics(win.SM_CYVIRTUALSCREEN)
+var lastUpdate time.Time
+var monitors []win.RECT
+var monitorMutex sync.Mutex
+
+func moveD(x, y float64, display uint64) bool {
+	monitorMutex.Lock()
+	defer monitorMutex.Unlock()
+	now := time.Now()
+	if now.Sub(lastUpdate).Seconds() > 10 {
+		monitors = GetMonitorsRect()
+		lastUpdate = now
+		log.Printf("monitors: %#v", monitors)
 	}
-	sx := int32(x * float64(sw))
-	sy := int32(y * float64(sh))
-	win.SetCursorPos(sx, sy)
+	if display >= uint64(len(monitors)) {
+		return false
+	}
+	rect := monitors[int(display)]
+	sx := rect.Left + int32(x*float64(rect.Right-rect.Left))
+	sy := rect.Top + int32(y*float64(rect.Bottom-rect.Top))
+	return win.SetCursorPos(sx, sy)
 }
 
 func moveW(x, y float64, hWnd uint64) bool {
@@ -69,8 +193,7 @@ func moveW(x, y float64, hWnd uint64) bool {
 	win.SetForegroundWindow(win.HWND(hWnd)) // TODO
 	sx := rect.Left + int32(x*float64(rect.Right-rect.Left))
 	sy := rect.Top + int32(y*float64(rect.Bottom-rect.Top))
-	win.SetCursorPos(sx, sy)
-	return true
+	return win.SetCursorPos(sx, sy)
 }
 
 func click(button int) {
@@ -110,7 +233,7 @@ func buttonState(button int, press bool) {
 var vkeys = map[string]uint16{
 	"CONTROL": win.VK_CONTROL, "SHIFT": win.VK_LSHIFT, "ALT": win.VK_MENU, "Meta": win.VK_LWIN,
 	"BACKSPACE": win.VK_BACK, "TAB": win.VK_TAB, "ENTER": win.VK_RETURN, "ESCAPE": win.VK_ESCAPE,
-	"HOME": win.VK_HOME, "END": win.VK_END, "DELETE": win.VK_DELETE,
+	"HOME": win.VK_HOME, "END": win.VK_END, "DELETE": win.VK_DELETE, "CAPSLOCK": win.VK_CAPITAL,
 	"ARROWLEFT": win.VK_LEFT, "ARROWUP": win.VK_UP, "ARROWRIGHT": win.VK_RIGHT, "ARROWDOWN": win.VK_DOWN,
 	"F1": win.VK_F1, "F2": win.VK_F2, "F3": win.VK_F3, "F4": win.VK_F4, "F5": win.VK_F5,
 	"F6": win.VK_F6, "F7": win.VK_F7, "F8": win.VK_F8, "F9": win.VK_F9, "F10": win.VK_F10,

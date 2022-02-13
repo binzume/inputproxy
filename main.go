@@ -46,7 +46,7 @@ type Target struct {
 type InputEvent struct {
 	Type   string `json:"type"`
 	Action string `json:"action"`
-	Target Target `json:"target"`
+	Target Target `json:"target"` // monitor | window
 
 	// Mouse
 	X      float64 `json:"x"`
@@ -62,8 +62,10 @@ func handleMouse(msg *InputEvent) {
 		if !moveW(msg.X, msg.Y, msg.Target.ID) {
 			return
 		}
-	} else {
-		move(msg.X, msg.Y)
+	} else if msg.Target.Type == "monitor" {
+		if !moveD(msg.X, msg.Y, msg.Target.ID) {
+			return
+		}
 	}
 	if msg.Action == "click" {
 		click(msg.Button)
@@ -119,11 +121,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	GetMonitorsRect()
 	flag.Parse()
 	name := *secret
 	if name == "" {
 		name = genRandom(32)
 	}
+
 	log.Printf("input socket url: ws://%s:%d/socket/%s \n", *host, *port, name)
 	http.HandleFunc("/socket/"+name, handler)
 	http.ListenAndServe(fmt.Sprintf("%s:%d", *host, *port), nil)

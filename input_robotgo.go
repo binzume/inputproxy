@@ -36,6 +36,11 @@ func move(x, y float64) {
 	time.Sleep(time.Millisecond)
 }
 
+func moveD(x, y float64, windowId uint64) bool {
+	move(x, y)
+	return true
+}
+
 func moveW(x, y float64, windowId uint64) bool {
 	return false
 }
